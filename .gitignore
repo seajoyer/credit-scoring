@@ -1,2 +1,19 @@
 .ipynb_checkpoints/
 /data/
+pyrightconfig.json
+
+# Devenv
+.devenv*
+devenv.local.nix
+devenv.local.yaml
+
+# Python & UV
+__pycache__/
+.venv/
+.python-version
+
+# direnv
+.direnv
+
+# pre-commit
+.pre-commit-config.yaml

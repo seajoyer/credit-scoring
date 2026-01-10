@@ -1,0 +1,8 @@
+feature-engine>=1.9.3
+jupyterlab>=4.5.1
+jupyterlab-vim>=4.1.4
+matplotlib>=3.10.8
+numpy>=2.4.0
+pandas>=2.3.3
+scikit-learn>=1.8.0
+seaborn>=0.13.2
