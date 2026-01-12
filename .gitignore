@@ -1,6 +1,8 @@
 .ipynb_checkpoints/
 /data/
 pyrightconfig.json
+credit_scoring.egg-info
+delme.png
 
 # Devenv
 .devenv*
