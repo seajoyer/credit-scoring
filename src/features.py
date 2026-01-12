@@ -1,8 +1,265 @@
+import joblib
 import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-from optbinning import OptimalBinning
+from typing import List, Optional, Union, Dict
+
+from sklearn.base import BaseEstimator, TransformerMixin
+from sklearn.preprocessing import StandardScaler, RobustScaler, MinMaxScaler
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.compose import ColumnTransformer
+
+try:
+    from optbinning import OptimalBinning
+    OPTBINNING_AVAILABLE = True
+except ImportError:
+    OPTBINNING_AVAILABLE = False
+
+from src.config import Config
+
+class OutlierClipper(BaseEstimator, TransformerMixin):
+    """
+    Clip outliers based on thresholds.
+    """
+    def __init__(self, 
+                 age_lower: int = 21, 
+                 age_upper: int = 87, 
+                 debt_ratio_upper: float = 2.0,
+                 utilization_upper: float = 1.5,
+                 income_upper_percentile: float = 95.0):
+        self.age_lower = age_lower
+        self.age_upper = age_upper
+        self.debt_ratio_upper = debt_ratio_upper
+        self.utilization_upper = utilization_upper
+        self.income_upper_percentile = income_upper_percentile
+        self.clip_params_ = {}
+
+    def fit(self, X, y=None):
+        X = X.copy()
+        # Store dynamic thresholds
+        if 'MonthlyIncome' in X.columns:
+            upper = np.nanpercentile(X['MonthlyIncome'], self.income_upper_percentile)
+            self.clip_params_['MonthlyIncome'] = {'upper': upper}
+        return self
+
+    def transform(self, X):
+        X = X.copy()
+        # Static Clipping
+        if 'age' in X.columns:
+            X['age'] = X['age'].clip(lower=self.age_lower, upper=self.age_upper)
+        if 'DebtRatio' in X.columns:
+            X['DebtRatio'] = X['DebtRatio'].clip(upper=self.debt_ratio_upper)
+        if 'RevolvingUtilizationOfUnsecuredLines' in X.columns:
+            col = 'RevolvingUtilizationOfUnsecuredLines'
+            X[col] = X[col].clip(upper=self.utilization_upper)
+            
+        # Dynamic Clipping
+        for col, params in self.clip_params_.items():
+            if col in X.columns:
+                X[col] = X[col].clip(upper=params['upper'])
+        return X
+    
+    def get_feature_names_out(self, input_features=None):
+        return input_features
+
+class ClippingIndicator(BaseEstimator, TransformerMixin):
+    """Add binary indicators for clipped values."""
+    def __init__(self, age_lower: int = 21, age_upper: int = 87, debt_ratio_upper: float = 2.0):
+        self.age_lower = age_lower
+        self.age_upper = age_upper
+        self.debt_ratio_upper = debt_ratio_upper
+        
+    def fit(self, X, y=None):
+        return self
+        
+    def transform(self, X):
+        X = X.copy()
+        if 'age' in X.columns:
+            X['age_clipped_young'] = (X['age'] < self.age_lower).astype(int)
+            X['age_clipped_old'] = (X['age'] > self.age_upper).astype(int)
+        if 'DebtRatio' in X.columns:
+            X['debt_ratio_clipped'] = (X['DebtRatio'] > self.debt_ratio_upper).astype(int)
+        return X
+
+    def get_feature_names_out(self, input_features=None):
+        features = list(input_features) if input_features is not None else []
+        return np.array(features + ['age_clipped_young', 'age_clipped_old', 'debt_ratio_clipped'])
+
+class CreditFeatureAdder(BaseEstimator, TransformerMixin):
+    """Create new domain features."""
+    def __init__(self, 
+                 add_age_buckets: bool = True,
+                 add_debt_income_ratio: bool = True, 
+                 add_utilization_squared: bool = True,
+                 add_delinquency_features: bool = True):
+        self.add_age_buckets = add_age_buckets
+        self.add_debt_income_ratio = add_debt_income_ratio
+        self.add_utilization_squared = add_utilization_squared
+        self.add_delinquency_features = add_delinquency_features
+
+    def fit(self, X, y=None):
+        return self
+
+    def transform(self, X):
+        X = X.copy()
+        
+        if self.add_debt_income_ratio and 'DebtRatio' in X.columns and 'MonthlyIncome' in X.columns:
+            X['debt_income_ratio'] = X['DebtRatio'] * X['MonthlyIncome']
+            
+        if self.add_age_buckets and 'age' in X.columns:
+            X['is_young'] = (X['age'] < 30).astype(int)
+            X['is_senior'] = (X['age'] >= 60).astype(int)
+            
+        if self.add_utilization_squared and 'RevolvingUtilizationOfUnsecuredLines' in X.columns:
+            X['utilization_squared'] = X['RevolvingUtilizationOfUnsecuredLines'] ** 2
+            
+        if self.add_delinquency_features:
+            delinq_cols = ['NumberOfTime30-59DaysPastDueNotWorse', 'NumberOfTimes90DaysLate', 'NumberOfTime60-89DaysPastDueNotWorse']
+            available = [c for c in delinq_cols if c in X.columns]
+            if available:
+                X['total_delinquencies'] = X[available].sum(axis=1)
+                X['has_delinquency'] = (X['total_delinquencies'] > 0).astype(int)
+        
+        return X
+
+class CustomImputer(BaseEstimator, TransformerMixin):
+    """Handle missing values with configurable strategies."""
+    def __init__(self, 
+                 income_imputation: str = 'median', 
+                 dependents_imputation: str = 'constant'):
+        self.income_imputation = income_imputation
+        self.dependents_imputation = dependents_imputation
+        self.imputers_ = {}
+
+    def _get_imputer(self, strategy: str) -> SimpleImputer:
+        """Helper to create imputer based on strategy string."""
+        if strategy == 'mode':
+            return SimpleImputer(strategy='most_frequent')
+        elif strategy == 'zero' or strategy == 'constant':
+            return SimpleImputer(strategy='constant', fill_value=0)
+        else:
+            # Passes 'mean', 'median', 'most_frequent' directly
+            return SimpleImputer(strategy=strategy)
+
+    def fit(self, X, y=None):
+        # MonthlyIncome
+        if 'MonthlyIncome' in X.columns:
+            self.imputers_['MonthlyIncome'] = self._get_imputer(self.income_imputation)
+            self.imputers_['MonthlyIncome'].fit(X[['MonthlyIncome']])
+            
+        # Dependents
+        if 'NumberOfDependents' in X.columns:
+            self.imputers_['NumberOfDependents'] = self._get_imputer(self.dependents_imputation)
+            self.imputers_['NumberOfDependents'].fit(X[['NumberOfDependents']])
+        return self
+
+    def transform(self, X):
+        X = X.copy()
+        for col, imputer in self.imputers_.items():
+            if col in X.columns:
+                X[col] = imputer.transform(X[[col]]).ravel()
+        return X
+
+class WoEBinningTransformer(BaseEstimator, TransformerMixin):
+    """
+    Weight of Evidence Binning Wrapper for OptBinning.
+    """
+    def __init__(self, numeric_features: List[str], enabled: bool = False):
+        self.numeric_features = numeric_features
+        self.enabled = enabled
+        self.binners_ = {}
+
+        if self.enabled and not OPTBINNING_AVAILABLE:
+            warnings.warn(
+                "WoEBinningTransformer is enabled but optbinning is not installed."
+                "Features will be passed through unchanged.",
+                UserWarning
+            )
+        
+    def fit(self, X, y=None):
+        if not self.enabled or not OPTBINNING_AVAILABLE:
+            return self
+            
+        for col in self.numeric_features:
+            if col in X.columns:
+                optb = OptimalBinning(name=col, dtype="numerical", solver="cp")
+                optb.fit(X[col], y)
+                self.binners_[col] = optb
+        return self
+        
+    def transform(self, X):
+        if not self.enabled or not self.binners_:
+            return X
+        
+        X = X.copy()
+        for col, binner in self.binners_.items():
+            if col in X.columns:
+                X[col] = binner.transform(X[col], metric="woe")
+        return X
+
+def create_preprocessing_pipeline(config: Config) -> Pipeline:
+    """
+    Factory to create the pipeline with initial defaults from config.
+    """
+    fe = config.feature_engineering
+    
+    pipeline = Pipeline([
+        ('indicators', ClippingIndicator(
+            age_lower=fe.age_lower, 
+            age_upper=fe.age_upper,
+            debt_ratio_upper=fe.debt_ratio_upper
+        )),
+        ('clipper', OutlierClipper(
+            age_lower=fe.age_lower,
+            age_upper=fe.age_upper,
+            debt_ratio_upper=fe.debt_ratio_upper,
+            utilization_upper=fe.utilization_upper,
+            income_upper_percentile=fe.income_upper_percentile
+        )),
+        ('imputer', CustomImputer(
+            income_imputation=fe.income_imputation,
+            dependents_imputation=fe.dependents_imputation
+        )),
+        ('feature_adder', CreditFeatureAdder(
+            add_age_buckets=fe.add_age_buckets,
+            add_debt_income_ratio=fe.add_debt_income_ratio,
+            add_utilization_squared=fe.add_utilization_squared,
+            add_delinquency_features=fe.add_delinquency_features
+        )),
+        ('woe_binning', WoEBinningTransformer(
+            numeric_features=config.data.numeric_features,
+            enabled=fe.use_woe_binning
+        ))
+    ])
+    
+    if fe.scale_features:
+        if fe.scaling_method == 'minmax':
+            scaler = MinMaxScaler()
+        elif fe.scaling_method == 'robust':
+            scaler = RobustScaler()
+        else:
+            scaler = StandardScaler()
+        
+        pipeline.steps.append(('scaler', scaler))
+        
+    return pipeline
+
+
+
+
+
+
+
+
+
+
+
+
+# ============================================================================
+# Helping Functions
+# ============================================================================
 
 def apply_woe_binning(df, feature, target, 
                      max_n_bins=10, monotonic_trend='auto',
@@ -67,8 +324,8 @@ def apply_woe_binning(df, feature, target,
 
 
 
-def plot_feature_analysis(df, feature, target='SeriousDlqin2yrs',
-                          n_quantiles=40, max_value=None,  upper_percentile=None,
+def plot_feature_analysis(df, feature, target=None, target_name='SeriousDlqin2yrs',
+                          n_quantiles=40, max_value=None, upper_percentile=None,
                           discrete=False, figsize=(6, 4), ax=None, title=None):
     """
     Create distribution and default rate analysis plot for a feature.
@@ -76,11 +333,13 @@ def plot_feature_analysis(df, feature, target='SeriousDlqin2yrs',
     Parameters:
     -----------
     df : pd.DataFrame
-        Input dataframe
+        Input dataframe (features only, or including target)
     feature : str
         Name of the feature to analyze
-    target : str, default='SeriousDlqin2yrs'
-        Name of the target variable
+    target : pd.Series or array-like, optional
+        Target variable as a separate series. If None, looks for target_name in df
+    target_name : str, default='SeriousDlqin2yrs'
+        Name of the target variable (used when target is in df or for labeling)
     n_quantiles : int, default=40
         Number of quantiles for binning (ignored if discrete=True)
     max_value : float, optional
@@ -89,7 +348,7 @@ def plot_feature_analysis(df, feature, target='SeriousDlqin2yrs',
         Upper percentile threshold for filtering (e.g., 0.99 for 99th percentile)
     discrete : bool, default=False
         If True, treats feature as discrete/categorical (no binning)
-    figsize : tuple, default=(12, 4)
+    figsize : tuple, default=(6, 4)
         Figure size (only used if ax is None)
     ax : matplotlib.axes.Axes, optional
         Axes object to plot on. If None, creates a new figure
@@ -99,7 +358,12 @@ def plot_feature_analysis(df, feature, target='SeriousDlqin2yrs',
     ax : matplotlib.axes.Axes
         The axes object used for plotting
     """
-    data = df[[feature, target]].copy()
+    # Handle target: either passed separately or in dataframe
+    if target is not None:
+        data = df[[feature]].copy()
+        data[target_name] = target
+    else:
+        data = df[[feature, target_name]].copy()
     
     if max_value is not None:
         upper = max_value
@@ -111,15 +375,15 @@ def plot_feature_analysis(df, feature, target='SeriousDlqin2yrs',
     plot_data = data.loc[data[feature].le(upper)].copy()
     
     if discrete:
-        default_rate = plot_data.groupby(feature)[target].mean().reset_index()
-        default_rate = default_rate.rename(columns={target: 'DefaultRate'})
+        default_rate = plot_data.groupby(feature)[target_name].mean().reset_index()
+        default_rate = default_rate.rename(columns={target_name: 'DefaultRate'})
         x_col = feature
     else:
         plot_data['bin_feature'] = pd.qcut(plot_data[feature], q=n_quantiles, duplicates='drop')
         plot_data['bin_feature_mid'] = pd.to_numeric(plot_data.bin_feature.apply(lambda x: x.mid))
         
-        default_rate = plot_data.groupby('bin_feature_mid')[target].mean().reset_index()
-        default_rate = default_rate.rename(columns={target: 'DefaultRate'})
+        default_rate = plot_data.groupby('bin_feature_mid')[target_name].mean().reset_index()
+        default_rate = default_rate.rename(columns={target_name: 'DefaultRate'})
         x_col = 'bin_feature_mid'
     
     if ax is None:
@@ -142,6 +406,7 @@ def plot_feature_analysis(df, feature, target='SeriousDlqin2yrs',
         ax.set_title(rf'{title}')
     
     return ax
+
 
 
 
