@@ -159,38 +159,117 @@ def plot_feature_analysis(df, feature, target=None, target_name='SeriousDlqin2yr
 
 
 
-def cap_outliers(df, feature,
+import pandas as pd
+
+def cap_outliers(data, feature=None,
                  lower_percentile=None,
                  upper_percentile=None,
-                 known_limits=None):
+                 known_limits=None,
+                 verbose=False):
+    """
+    Cap outliers in a pandas DataFrame column or Series using percentile-based or known limits.
+    
+    Parameters
+    ----------
+    data : pd.DataFrame or pd.Series
+        Input data. For DataFrames, specify 'feature'. For Series, 'feature' is ignored.
+    feature : str, optional
+        Column name to cap (required for DataFrame input).
+    lower_percentile : float, optional
+        Lower percentile (0-1) for clipping boundary.
+    upper_percentile : float, optional
+        Upper percentile (0-1) for clipping boundary.
+    known_limits : tuple or list, optional
+        Explicit (lower, upper) bounds to use instead of percentiles.
+    verbose : bool, optional
+        If True, print capping statistics.
+    
+    Returns
+    -------
+    pd.DataFrame or pd.Series
+        Data with outliers capped (same type as input).
+    """
+    if lower_percentile is None and upper_percentile is None and known_limits is None:
+        raise ValueError(
+            "At least one limit must be specified: lower_percentile, upper_percentile, or known_limits"
+        )
+    
+    if known_limits is not None:
+        if not isinstance(known_limits, (tuple, list)) or len(known_limits) != 2:
+            raise ValueError("known_limits must be a tuple or list of two values (lower, upper)")
+        lower_limit, upper_limit = known_limits
 
-    if lower_percentile is None and upper_percentile is None:
-        raise ValueError("At least one limit must be specified: upper_percentile or lower_percentile")
-    if lower_percentile is not None and (lower_percentile < 0 or lower_percentile > 1):
-        raise ValueError("lower_percentile must be between 0 and 1")
-    if upper_percentile is not None and (upper_percentile < 0 or upper_percentile > 1):
-        raise ValueError("upper_percentile must be between 0 and 1")
-    if feature not in df.columns:
-        raise KeyError(f"Feature '{feature}' not found in data")
+    # Handle Series input
+    if isinstance(data, pd.Series):
+        if feature is not None and verbose:
+            print(f"Note: 'feature' parameter ignored for Series input (using Series directly).")
         
-    data = df.copy()
+        series_orig = data.copy()
+        series_name = series_orig.name if series_orig.name is not None else "unnamed_series"
+        
+        if known_limits is not None:
+            lower, upper = lower_limit, upper_limit
+        else:
+            lower = series_orig.quantile(lower_percentile) if lower_percentile is not None else None
+            upper = series_orig.quantile(upper_percentile) if upper_percentile is not None else None
+        
+        if lower_percentile is not None and not (0 <= lower_percentile <= 1):
+            raise ValueError("lower_percentile must be between 0 and 1")
+        if upper_percentile is not None and not (0 <= upper_percentile <= 1):
+            raise ValueError("upper_percentile must be between 0 and 1")
+        
+        series_capped = series_orig.clip(lower=lower, upper=upper)
+        
+        lower_clipped = (series_orig < lower).sum() if lower is not None else 0
+        upper_clipped = (series_orig > upper).sum() if upper is not None else 0
+        total_clipped = lower_clipped + upper_clipped
+        
+        lower_str = f"lower={lower:.4f}" if lower is not None else "lower=None"
+        upper_str = f"upper={upper:.4f}" if upper is not None else "upper=None"
+        if verbose:
+            print(f"Capped {total_clipped} outliers in `{series_name}` ({lower_str}, {upper_str})")
+        
+        return series_capped
 
-    if known_limits:
-        lower, upper = known_limits
+    # Handle DataFrame input
+    elif isinstance(data, pd.DataFrame):
+        if feature is None:
+            raise ValueError("For DataFrame input, 'feature' parameter must be specified")
+        if feature not in data.columns:
+            raise KeyError(f"Feature '{feature}' not found in DataFrame columns")
+        
+        if lower_percentile is not None and not (0 <= lower_percentile <= 1):
+            raise ValueError("lower_percentile must be between 0 and 1")
+        if upper_percentile is not None and not (0 <= upper_percentile <= 1):
+            raise ValueError("upper_percentile must be between 0 and 1")
+        
+        df_copy = data.copy()
+        col_orig = df_copy[feature].copy()
+        
+        if known_limits is not None:
+            lower, upper = lower_limit, upper_limit
+        else:
+            lower = col_orig.quantile(lower_percentile) if lower_percentile is not None else None
+            upper = col_orig.quantile(upper_percentile) if upper_percentile is not None else None
+        
+        df_copy[feature] = col_orig.clip(lower=lower, upper=upper)
+        
+        lower_clipped = (col_orig < lower).sum() if lower is not None else 0
+        upper_clipped = (col_orig > upper).sum() if upper is not None else 0
+        total_clipped = lower_clipped + upper_clipped
+        
+        lower_str = f"lower={lower:.4f}" if lower is not None else "lower=None"
+        upper_str = f"upper={upper:.4f}" if upper is not None else "upper=None"
+        if verbose:
+            print(f"Capped {total_clipped} outliers in `{feature}` ({lower_str}, {upper_str})")
+        
+        return df_copy
+
     else:
-        lower = data[feature].quantile(lower_percentile) if lower_percentile is not None else None
-        upper = data[feature].quantile(upper_percentile) if upper_percentile is not None else None
-
-    data[feature] = data[feature].clip(lower=lower, upper=upper)
-
-    outliers_capped = ((data[feature] == lower) | (data[feature] == upper)).sum()
-
-    lower_str = f"lower={lower:.4f}" if lower is not None else "lower=None"
-    upper_str = f"upper={upper:.4f}" if upper is not None else "upper=None"
-    
-    print(f"Capped {outliers_capped} outliers in `{feature}` ({lower_str}, {upper_str})")
-    
-    return data
+        raise TypeError(
+            f"Expected pandas DataFrame or Series, got {type(data).__name__}. "
+            "Convert your data to a pandas object first."
+        )
 
 
 

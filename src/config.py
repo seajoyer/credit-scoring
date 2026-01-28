@@ -20,7 +20,7 @@ class OutlierClippingConfig:
     age_bounds: tuple[int, int] = (21, 87)
     debt_ratio_upper: float = 2.0
     utilization_upper: float = 1.5
-    income_upper_percentile: float = 99.0
+    income_upper_percentile: float = 95.0
     
     def to_dict(self) -> Dict:
         """Convert to dictionary for serialization."""
@@ -53,19 +53,30 @@ class FeatureCreationConfig:
     
     Attributes:
         add_age_buckets: Create age category indicators
-        add_debt_income_ratio: Create debt*income interaction
+        add_age_squared: Create age^2 feature
+        add_age_cubed:   Create age^3 feature
+        add_income_missing: Create indicator for missing income values
         add_utilization_squared: Create utilization^2 feature
         add_delinquency_features: Create delinquency aggregations
         age_young_threshold: Age below which is considered "young"
         age_senior_threshold: Age above which is considered "senior"
     """
     add_age_buckets: bool = True
-    add_debt_income_ratio: bool = True
+    add_age_squared: bool = True
+    add_age_cubed:   bool = True
+    add_age_polynomial: bool = True
+    add_income_missing: bool = True
+    add_income_zero: bool = True
+    add_income_high: bool = True
+    add_income_low:  bool = True
     add_utilization_squared: bool = True
     add_delinquency_features: bool = True
     
     age_young_threshold: int = 30
     age_senior_threshold: int = 60
+
+    income_high_threshold: float = 14587.0
+    income_low_threshold:  float = 1300.0
     
     def to_dict(self) -> Dict:
         """Convert to dictionary for serialization."""

@@ -261,17 +261,36 @@ class FeatureAdder(BaseEstimator, TransformerMixin):
         
         # Age buckets
         if self.config.add_age_buckets and 'age' in X.columns:
-            X['is_young'] = (X['age'] < self.config.age_young_threshold).astype(int)
+            X['is_young']  = (X['age'] <  self.config.age_young_threshold).astype(int)
             X['is_senior'] = (X['age'] >= self.config.age_senior_threshold).astype(int)
+
+        # Age squared
+        if self.config.add_age_squared and 'age' in X.columns:
+            X['age^2'] = X['age'] ** 2
         
-        # Debt-income interaction
-        if self.config.add_debt_income_ratio:
-            if 'DebtRatio' in X.columns and 'MonthlyIncome' in X.columns:
-                X['debt_income_ratio'] = X['DebtRatio'] * X['MonthlyIncome']
+        # Age cubed
+        if self.config.add_age_cubed and 'age' in X.columns:
+            X['age^3'] = X['age'] ** 3
+
+        # Income missing
+        if self.config.add_income_missing and 'MonthlyIncome' in X.columns:
+            X['MonthlyIncome_missing'] = X['MonthlyIncome'].isna().astype(int)
+        
+        # Income zero
+        if self.config.add_income_zero and 'MonthlyIncome' in X.columns:
+            X['MonthlyIncome_zero'] = X['MonthlyIncome'].eq(0.0).astype(int)
+        
+        # Income high
+        if self.config.add_income_high and 'MonthlyIncome' in X.columns:
+            X['HighIncome'] = X['MonthlyIncome'].ge(self.config.income_high_threshold).astype(int)
+
+        # Income low
+        if self.config.add_income_low and 'MonthlyIncome' in X.columns:
+            X['LowIncome']  = X['MonthlyIncome'].le(self.config.income_low_threshold).astype(int)
         
         # Utilization squared
-        if self.config.add_utilization_squared:
-            if 'RevolvingUtilizationOfUnsecuredLines' in X.columns:
+        if (self.config.add_utilization_squared and
+            'RevolvingUtilizationOfUnsecuredLines' in X.columns):
                 X['utilization_squared'] = X['RevolvingUtilizationOfUnsecuredLines'] ** 2
         
         # Delinquency features
