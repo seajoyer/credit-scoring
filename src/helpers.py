@@ -1,6 +1,6 @@
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import seaborn as sns
 from optbinning import OptimalBinning
 
@@ -133,7 +133,7 @@ def plot_feature_analysis(df, feature, target=None, target_name='SeriousDlqin2yr
         x_col = 'bin_feature_mid'
     
     if ax is None:
-        fig, ax = plt.subplots(1, 1, figsize=figsize)
+        _fig, ax = plt.subplots(1, 1, figsize=figsize)
     
     if discrete:
         sns.histplot(x=plot_data[feature], element='step', discrete=True, ax=ax)
@@ -157,9 +157,6 @@ def plot_feature_analysis(df, feature, target=None, target_name='SeriousDlqin2yr
     
     return ax
 
-
-
-import pandas as pd
 
 def cap_outliers(data, feature=None,
                  lower_percentile=None,
@@ -202,7 +199,7 @@ def cap_outliers(data, feature=None,
     # Handle Series input
     if isinstance(data, pd.Series):
         if feature is not None and verbose:
-            print(f"Note: 'feature' parameter ignored for Series input (using Series directly).")
+            print("Note: 'feature' parameter ignored for Series input (using Series directly).")
         
         series_orig = data.copy()
         series_name = series_orig.name if series_orig.name is not None else "unnamed_series"
@@ -272,7 +269,6 @@ def cap_outliers(data, feature=None,
         )
 
 
-
 def plot_log_odds(df, feature,   target='SeriousDlqin2yrs',
                   clip_min=None, clip_max=None,
                   bins=20,       epsilon=1e-6,
@@ -313,12 +309,13 @@ def plot_log_odds(df, feature,   target='SeriousDlqin2yrs',
     sizes = min_size + (counts - counts.min()) / (counts.max() - counts.min() + 1e-6) * (max_size - min_size)
     
     if ax is None:
-        fig, ax = plt.subplots(figsize=(8, 4))
+        _fig, ax = plt.subplots(figsize=(8, 4))
     
     scatter = ax.scatter(bin_midpoints, log_odds, s=sizes, alpha=0.6, 
                         edgecolors=edgecolors, color=color, linewidths=0.5)
 
-    ax.set_title(title)
+    if title:
+        ax.set_title(title)
     ax.set_xlabel(xlabel if xlabel is not None else feature)
     ax.set_ylabel(ylabel)
     ax.grid(True, alpha=0.3)
@@ -326,7 +323,8 @@ def plot_log_odds(df, feature,   target='SeriousDlqin2yrs',
     scatter_color = scatter.get_facecolors()[0]
     
     legend_counts = np.linspace(counts.min(), counts.max(), 4).astype(int)
-    legend_sizes = min_size + (legend_counts - counts.min()) / (counts.max() - counts.min() + 1e-6) * (max_size - min_size)
+    legend_sizes = min_size + (legend_counts - counts.min()) / \
+        (counts.max() - counts.min() + 1e-6) * (max_size - min_size)
     
     legend_handles = [plt.scatter([], [], s=size, color=scatter_color, alpha=0.6, 
                                  edgecolors='black', linewidths=0.5) 
@@ -386,12 +384,13 @@ def plot_WoE(df, feature,   target='SeriousDlqin2yrs',
     sizes = min_size + (counts - counts.min()) / (counts.max() - counts.min() + 1e-6) * (max_size - min_size)
     
     if ax is None:
-        fig, ax = plt.subplots(figsize=(8, 4))
+        _fig, ax = plt.subplots(figsize=(8, 4))
     
     scatter = ax.scatter(bin_midpoints, WoE, s=sizes, alpha=0.6, 
                          edgecolors=edgecolors, linewidths=0.5, color=color)
     
-    ax.set_title(title)
+    if title:
+        ax.set_title(title)
     ax.set_xlabel(xlabel if xlabel is not None else feature)
     ax.set_ylabel(ylabel)
     ax.grid(True, alpha=0.3)
@@ -399,7 +398,8 @@ def plot_WoE(df, feature,   target='SeriousDlqin2yrs',
     scatter_color = scatter.get_facecolors()[0]
     
     legend_counts = np.linspace(counts.min(), counts.max(), 4).astype(int)
-    legend_sizes = min_size + (legend_counts - counts.min()) / (counts.max() - counts.min() + 1e-6) * (max_size - min_size)
+    legend_sizes = min_size + (legend_counts - counts.min()) / \
+        (counts.max() - counts.min() + 1e-6) * (max_size - min_size)
     
     legend_handles = [plt.scatter([], [], s=size, color=scatter_color, alpha=0.6, 
                                  edgecolors='black', linewidths=0.5) 

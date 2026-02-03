@@ -1,9 +1,10 @@
-from dataclasses import dataclass, field, asdict
-from pathlib import Path
-from typing import List, Dict, Literal
-import numpy as np
-import random
 import json
+import random
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Literal
+
+import numpy as np
 
 
 @dataclass(frozen=True)
@@ -17,12 +18,23 @@ class OutlierClippingConfig:
         utilization_upper: Maximum credit utilization to allow
         income_upper_percentile: Percentile to clip income at (dynamic)
     """
-    age_bounds: tuple[int, int] = (21, 87)
-    debt_ratio_upper: float = 2.0
-    utilization_upper: float = 1.5
-    income_upper_percentile: float = 95.0
+    age_clip_lower: int = 21
+    age_clip_upper_percentile: float = 99.0
+    income_clip_upper_percentile: float = 90.0
+    util_clip_upper: float = 1.0
+    debt_ratio_clip_upper: float = 2.0
+    deps_clip_upper_percentile: float = 97.5
+    loans_clip_upper_percentile: float = 99.0
+    estate_clip_upper_percentile: float = 99.0
+    pd30_59_clip_upper_percentile: float = 99.0
+    pd60_89_clip_upper_percentile: float = 99.0
+    pd90_clip_upper_percentile: float = 99.0
+
+    # Replacement strategies
+    debt_ratio_strategy: Literal['clip', 'custom_median', 'zero'] = 'custom_median'
+    income_strategy:     Literal['clip', 'median', 'zero'] = 'clip'
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return asdict(self)
 
@@ -37,11 +49,61 @@ class ImputationConfig:
         dependents_strategy: How to impute missing dependent counts
         constant_fill_value: Value to use for constant imputation
     """
-    income_strategy: Literal['mean', 'median', 'constant'] = 'median'
+    income_strategy: Literal['mean', 'median', 'constant'] = 'constant'
     dependents_strategy: Literal['median', 'constant', 'most_frequent'] = 'constant'
     constant_fill_value: float = 0.0
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
+        """Convert to dictionary for serialization."""
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class IndicatorExtractionConfig:
+    """
+    Configuration for feature engineering.
+    
+    Attributes:
+        add_age_buckets: Add age category indicators
+        add_income_missing: Add indicator for missing income values
+        add_income_clipped: Add indicator for clipped income values
+        add_income_zero: Add indicator for zero income values
+        add_income_low: Add indicator for low income values
+        add_utilization_clipped: Add indicator for clipped utilization values
+        add_utilization_99999990: Add indicator for utilization == 0.99999990
+        add_deps_missing: Add indicator for missing NumberOfDependents values
+        add_debt_ratio_buckets: Create DebtRatio category indicators
+        add_debt_ratio_zero: Category with zero DebtRatio values
+        add_debt_ratio_whole: Category with whole DebtRatio values
+
+        age_young_threshold: Age below which is considered "young"
+        age_senior_threshold: Age above which is considered "senior"
+    """
+    add_age_buckets: bool = True
+    add_income_missing: bool = True
+    add_income_clipped: bool = True
+    add_income_zero: bool = True
+    add_income_low: bool = True
+    add_utilization_clipped: bool = True
+    add_utilization_99999990: bool = True
+    add_deps_missing: bool = True
+    add_debt_ratio_buckets: bool = True
+    add_debt_ratio_zero: bool = True
+    add_debt_ratio_whole: bool = True
+    
+    age_young_threshold:  int = 30
+    age_senior_threshold: int = 59
+
+    income_upper_percentile: float = \
+        OutlierClippingConfig().income_clip_upper_percentile
+    income_low_percentile: float = 5.0
+
+    util_clip_upper: float = \
+        OutlierClippingConfig().util_clip_upper
+    
+    debt_ratio_clip_upper: float = OutlierClippingConfig().debt_ratio_clip_upper
+    
+    def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return asdict(self)
 
@@ -52,33 +114,21 @@ class FeatureCreationConfig:
     Configuration for feature engineering.
     
     Attributes:
-        add_age_buckets: Create age category indicators
-        add_age_squared: Create age^2 feature
-        add_age_cubed:   Create age^3 feature
-        add_income_missing: Create indicator for missing income values
-        add_utilization_squared: Create utilization^2 feature
+        add_age_polynomial: Create age^2 and age^3 features
+        add_debt_ratio_polynomial: Create DebtRatio^2 and DebtRatio^3 features
+        add_loans_polynomial: Create NumberOfOpenCreditLinesAndLoans^2 and NumberOfOpenCreditLinesAndLoans^3 features
+        add_estate_polynomial: Create NumberRealEstateLoansOrLines^2 and NumberRealEstateLoansOrLines^3 features
+
         add_delinquency_features: Create delinquency aggregations
-        age_young_threshold: Age below which is considered "young"
-        age_senior_threshold: Age above which is considered "senior"
     """
-    add_age_buckets: bool = True
-    add_age_squared: bool = True
-    add_age_cubed:   bool = True
     add_age_polynomial: bool = True
-    add_income_missing: bool = True
-    add_income_zero: bool = True
-    add_income_high: bool = True
-    add_income_low:  bool = True
-    add_utilization_squared: bool = True
+    add_debt_ratio_polynomial: bool = True
+    add_loans_polynomial: bool = True
+    add_estate_polynomial: bool = True
+
     add_delinquency_features: bool = True
     
-    age_young_threshold: int = 30
-    age_senior_threshold: int = 60
-
-    income_high_threshold: float = 14587.0
-    income_low_threshold:  float = 1300.0
-    
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return asdict(self)
 
@@ -95,11 +145,39 @@ class ScalingConfig:
     enabled: bool = True
     method: Literal['standard', 'robust', 'minmax'] = 'standard'
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         return asdict(self)
 
 
+@dataclass(frozen=True)
+class FeatureTransformationConfig:
+    """
+    Configuration for feature-specific transformations.
+    
+    Attributes:
+        transformations: Dict mapping feature names to transformation types
+        yeo_johnson_standardize: Whether to standardize after Yeo-Johnson
+    """
+    transformations: dict[str, Literal['log1p', 'yeo-johnson', 'log', 'sqrt', 'none']] = field(
+        default_factory=lambda: {
+            'DebtRatio': 'yeo-johnson',
+            'DebtRatio^2': 'yeo-johnson',
+            'DebtRatio^3': 'yeo-johnson',
+            'NumberOfOpenCreditLinesAndLoans':   'log1p',
+            'NumberOfOpenCreditLinesAndLoans^2': 'log1p',
+            'NumberOfOpenCreditLinesAndLoans^3': 'log1p',
+            'NumberOfTimes90DaysLate': 'log1p'
+        }
+    )
+    
+    yeo_johnson_standardize: bool = True
+    
+    def to_dict(self) -> dict:
+        """Convert to dictionary for serialization."""
+        return asdict(self)
+
+     
 @dataclass(frozen=True)
 class WoEConfig:
     """
@@ -111,33 +189,35 @@ class WoEConfig:
         solver: Optimization solver to use
     """
     enabled: bool = False
-    features: List[str] = field(default_factory=list)
+    features: list[str] = field(default_factory=list)
     solver: Literal['cp', 'mip'] = 'cp'
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
         result = asdict(self)
         result['features'] = list(result['features'])
         return result
-
 
 @dataclass
 class PreprocessingConfig:
     """
     Master preprocessing configuration combining all sub-configs.
     """
+    indicator_extraction: IndicatorExtractionConfig = field(default_factory=IndicatorExtractionConfig)
     outlier_clipping: OutlierClippingConfig = field(default_factory=OutlierClippingConfig)
     imputation: ImputationConfig = field(default_factory=ImputationConfig)
     feature_creation: FeatureCreationConfig = field(default_factory=FeatureCreationConfig)
+    feature_transformation: FeatureTransformationConfig = field(default_factory=FeatureTransformationConfig)
     scaling: ScalingConfig = field(default_factory=ScalingConfig)
     woe: WoEConfig = field(default_factory=WoEConfig)
     
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict:
         """Serialize entire preprocessing config to dictionary."""
         return {
             'outlier_clipping': self.outlier_clipping.to_dict(),
             'imputation': self.imputation.to_dict(),
             'feature_creation': self.feature_creation.to_dict(),
+            'feature_transformation': self.feature_transformation.to_dict(),
             'scaling': self.scaling.to_dict(),
             'woe': self.woe.to_dict()
         }
@@ -152,13 +232,14 @@ class PreprocessingConfig:
     @classmethod
     def load(cls, path: Path) -> 'PreprocessingConfig':
         """Load configuration from JSON file."""
-        with open(path, 'r') as f:
+        with open(path) as f:
             data = json.load(f)
         
         return cls(
             outlier_clipping=OutlierClippingConfig(**data['outlier_clipping']),
             imputation=ImputationConfig(**data['imputation']),
             feature_creation=FeatureCreationConfig(**data['feature_creation']),
+            feature_transformation=FeatureTransformationConfig(**data.get('feature_transformation', {})),
             scaling=ScalingConfig(**data['scaling']),
             woe=WoEConfig(**data['woe'])
         )
@@ -223,7 +304,7 @@ class DataConfig:
         stratify: Whether to stratify train/test split
     """
     target_col: str = 'SeriousDlqin2yrs'
-    numeric_features: List[str] = field(default_factory=lambda: [
+    numeric_features: list[str] = field(default_factory=lambda: [
         'RevolvingUtilizationOfUnsecuredLines',
         'age',
         'NumberOfTime30-59DaysPastDueNotWorse',
@@ -246,7 +327,7 @@ class ModelRegistry:
     
     Provides default hyperparameters for common models.
     """
-    logistic_regression: Dict = field(default_factory=lambda: {
+    logistic_regression: dict = field(default_factory=lambda: {
         'C': 1.0,
         'penalty': 'l2',
         'solver': 'lbfgs',
@@ -254,7 +335,7 @@ class ModelRegistry:
         'class_weight': 'balanced'
     })
     
-    lgbm: Dict = field(default_factory=lambda: {
+    lgbm: dict = field(default_factory=lambda: {
         'n_estimators': 100,
         'learning_rate': 0.1,
         'max_depth': 5,
@@ -263,7 +344,7 @@ class ModelRegistry:
         'random_state': 42
     })
     
-    xgboost: Dict = field(default_factory=lambda: {
+    xgboost: dict = field(default_factory=lambda: {
         'n_estimators': 100,
         'learning_rate': 0.1,
         'max_depth': 5,
@@ -271,7 +352,7 @@ class ModelRegistry:
         'random_state': 42
     })
     
-    random_forest: Dict = field(default_factory=lambda: {
+    random_forest: dict = field(default_factory=lambda: {
         'n_estimators': 100,
         'max_depth': 10,
         'class_weight': 'balanced',
@@ -366,7 +447,7 @@ def set_seeds(seed: int = 42):
     np.random.seed(seed)
     random.seed(seed)
     try:
-        import torch
+        import torch  # ty:ignore[unresolved-import]
         torch.manual_seed(seed)
         if torch.cuda.is_available():
             torch.cuda.manual_seed_all(seed)

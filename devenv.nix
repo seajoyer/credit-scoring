@@ -2,8 +2,8 @@
 
 {
   packages = with pkgs; [
+    # ty
     git
-    pyright
   ];
 
   languages.python = {
@@ -17,21 +17,4 @@
   };
 
   processes.jupyter.exec = "jupyter notebook"; 
-
-  # env.LD_LIBRARY_PATH = lib.makeLibraryPath [
-  #   pkgs.stdenv.cc.cc.lib
-  #   pkgs.zlib
-  #   pkgs.glib
-  # ];
-
-  enterShell = ''
-    cat <<EOF > pyrightconfig.json
-    {
-      "venvPath": "$DEVENV_ROOT/.devenv/state",
-      "venv": "venv",
-      "include": ["src", "notebooks"],
-      "exclude": ["**/node_modules", "**/__pycache__"]
-    }
-    EOF
-  '';
 }
