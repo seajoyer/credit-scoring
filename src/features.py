@@ -97,6 +97,8 @@ class OutlierClipper(BaseEstimator, TransformerMixin):
         else:
             self.feature_names_in_ = np.array([f"x{i}" for i in range(X.shape[1])], dtype=object)
 
+        self.feature_names_out_ = self.feature_names_in_.copy()
+
         if not self.config.enabled:
             return self
 
@@ -149,8 +151,6 @@ class OutlierClipper(BaseEstimator, TransformerMixin):
         if self.config.clip_pd90 and "NumberOfTimes90DaysLate" in X.columns:
             pd90_upper = np.nanpercentile(X["NumberOfTimes90DaysLate"], self.config.pd90_clip_upper_percentile)
             self.fitted_thresholds_["pd90_upper"] = pd90_upper
-
-        self.feature_names_out_ = self.feature_names_in_.copy()
 
         return self
 
@@ -272,6 +272,10 @@ class IndicatorExtractor(BaseEstimator, TransformerMixin):
         else:
             self.feature_names_in_ = np.array([f"x{i}" for i in range(X.shape[1])], dtype=object)
 
+        if not self.config.enabled:
+            self.feature_names_out_ = self.feature_names_in_.copy()
+            return self
+
         if self.features_to_track is None:
             self.features_to_track_ = [col for col in X.columns if X[col].isna().any()]
         else:
@@ -299,6 +303,9 @@ class IndicatorExtractor(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         """Create binary indicators."""
+        if not self.config.enabled:
+            return X
+
         X = X.copy()
 
         # Missing
@@ -490,11 +497,18 @@ class FeatureCreator(BaseEstimator, TransformerMixin):
         else:
             self.feature_names_in_ = np.array([f"x{i}" for i in range(X.shape[1])], dtype=object)
 
+        if not self.config.enabled:
+            self.feature_names_out_ = self.feature_names_out_.copy()
+            return self
+
         self.feature_names_out_ = self._get_output_features(self.feature_names_in_)
 
         return self
 
     def transform(self, X):
+        if not self.config.enabled:
+            return X
+
         X = X.copy()
 
         # Age polynomial
@@ -576,13 +590,8 @@ class FeatureTransformer(BaseEstimator, TransformerMixin):
         feature_names_out_: Output feature names (fitted)
     """
 
-    def __init__(
-        self,
-        transformations: dict[str, Literal["log1p", "yeo-johnson", "log", "sqrt", "none"]],
-        yeo_johnson_standardize: bool = True,
-    ):
-        self.transformations = transformations
-        self.yeo_johnson_standardize = yeo_johnson_standardize
+    def __init__(self, config: FeatureCreationConfig):
+        self.config = config
         self.power_transformers_ = {}
 
     def fit(self, X, y=None):
@@ -596,11 +605,12 @@ class FeatureTransformer(BaseEstimator, TransformerMixin):
         else:
             self.feature_names_in_ = np.array([f"x{i}" for i in range(X.shape[1])], dtype=object)
 
-        for feature, transform_type in self.transformations.items():
-            if transform_type == "yeo-johnson" and feature in X.columns:
-                pt = PowerTransformer(method="yeo-johnson", standardize=self.yeo_johnson_standardize)
-                pt.fit(X[[feature]])
-                self.power_transformers_[feature] = pt
+        if self.config.enabled:
+            for feature, transform_type in self.config.transformations.items():
+                if transform_type == "yeo-johnson" and feature in X.columns:
+                    pt = PowerTransformer(method="yeo-johnson", standardize=self.config.yeo_johnson_standardize)
+                    pt.fit(X[[feature]])
+                    self.power_transformers_[feature] = pt
 
         self.feature_names_out_ = self.feature_names_in_.copy()
 
@@ -608,9 +618,12 @@ class FeatureTransformer(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         """Apply transformations to specified features."""
+        if not self.config.enabled:
+            return X
+
         X = X.copy()
 
-        for feature, transform_type in self.transformations.items():
+        for feature, transform_type in self.config.transformations.items():
             if feature not in X.columns:
                 warnings.warn(
                     f"Feature '{feature}' not found in data. Skipping transformation.",
@@ -717,12 +730,14 @@ class WoEBinningTransformer(BaseEstimator, TransformerMixin):
             )
 
     def fit(self, X, y=None):
+        if isinstance(X, pd.DataFrame):
+            self.feature_names_in_ = np.array(X.columns, dtype=object)
+        else:
+            self.feature_names_in_ = np.array([f"x{i}" for i in range(X.shape[1])], dtype=object)
+
+        self.feature_names_out_ = self.feature_names_in_.copy()
+
         if not self.config.enabled or not OPTBINNING_AVAILABLE:
-            if isinstance(X, pd.DataFrame):
-                self.feature_names_in_ = np.array(X.columns, dtype=object)
-            else:
-                self.feature_names_in_ = np.array([f"x{i}" for i in range(X.shape[1])], dtype=object)
-            self.feature_names_out_ = self.feature_names_in_.copy()
             return self
 
         if y is None:
@@ -731,17 +746,7 @@ class WoEBinningTransformer(BaseEstimator, TransformerMixin):
                 UserWarning,
                 stacklevel=2,
             )
-            if isinstance(X, pd.DataFrame):
-                self.feature_names_in_ = np.array(X.columns, dtype=object)
-            else:
-                self.feature_names_in_ = np.array([f"x{i}" for i in range(X.shape[1])], dtype=object)
-            self.feature_names_out_ = self.feature_names_in_.copy()
             return self
-
-        if isinstance(X, pd.DataFrame):
-            self.feature_names_in_ = np.array(X.columns, dtype=object)
-        else:
-            self.feature_names_in_ = np.array([f"x{i}" for i in range(X.shape[1])], dtype=object)
 
         features_to_bin = self.config.features if self.config.features else self.numeric_features
 
@@ -776,7 +781,6 @@ class WoEBinningTransformer(BaseEstimator, TransformerMixin):
                     stacklevel=2,
                 )
 
-        self.feature_names_out_ = self.feature_names_in_.copy()
         return self
 
     def transform(self, X):
@@ -834,6 +838,9 @@ def create_indicator_pipeline(config: Config) -> Pipeline:
     """
     pp = config.preprocessing
 
+    if not pp.indicator_extraction.enabled:
+        return Pipeline([("passthrough", FunctionTransformer())])
+
     return Pipeline([("indicator_extractor", IndicatorExtractor(pp.indicator_extraction))])
 
 
@@ -859,6 +866,9 @@ def create_feature_pipeline(config: Config) -> Pipeline:
     """
     pp = config.preprocessing
 
+    if not pp.feature_creation.enabled:
+        return Pipeline([("passthrough", FunctionTransformer())])
+
     return Pipeline([("feature_creator", FeatureCreator(pp.feature_creation))])
 
 
@@ -870,14 +880,11 @@ def create_transformation_pipeline(config: Config) -> Pipeline:
 
     steps = []
 
-    if pp.feature_transformation.transformations:
+    if pp.feature_transformation.enabled and pp.feature_transformation.transformations:
         steps.append(
             (
                 "feature_transformer",
-                FeatureTransformer(
-                    pp.feature_transformation.transformations,
-                    pp.feature_transformation.yeo_johnson_standardize,
-                ),
+                FeatureTransformer(pp.feature_transformation),
             )
         )
         return Pipeline([("passthrough", FunctionTransformer())])

@@ -104,6 +104,8 @@ class IndicatorExtractionConfig:
         age_senior_threshold: Age above which is considered "senior"
     """
 
+    enabled: bool = True
+
     add_age_buckets: bool = True
     add_income_missing: bool = True
     add_income_clipped: bool = True
@@ -145,6 +147,8 @@ class FeatureCreationConfig:
         add_delinquency_features: Create delinquency aggregations
     """
 
+    enabled: bool = False
+
     add_age_polynomial: bool = True
     add_debt_ratio_polynomial: bool = True
     add_loans_polynomial: bool = True
@@ -184,6 +188,7 @@ class FeatureTransformationConfig:
         transformations: Dict mapping feature names to transformation types
         yeo_johnson_standardize: Whether to standardize after Yeo-Johnson
     """
+    enabled: bool = True
 
     transformations: dict[str, Literal["log1p", "yeo-johnson", "log", "sqrt", "none"]] = field(
         default_factory=lambda: {
@@ -384,6 +389,7 @@ class DataConfig:
         ]
     )
     test_size: float = 0.2
+    random_seed: int = 42
     stratify: bool = True
 
 
