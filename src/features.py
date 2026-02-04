@@ -1,3 +1,4 @@
+from pyparsing.tools.cvt_pyparsing_pep8_names import special_changes
 import warnings
 from pathlib import Path
 from typing import Literal
@@ -96,54 +97,58 @@ class OutlierClipper(BaseEstimator, TransformerMixin):
         else:
             self.feature_names_in_ = np.array([f"x{i}" for i in range(X.shape[1])], dtype=object)
 
-        if "age" in X.columns:
+        if not self.config.enabled:
+            return self
+
+        if self.config.clip_age and "age" in X.columns:
             age_upper = np.nanpercentile(X["age"], self.config.age_clip_upper_percentile)
             self.fitted_thresholds_["age_upper"] = age_upper
 
-        if "MonthlyIncome" in X.columns:
+        if self.config.clip_income and "MonthlyIncome" in X.columns:
             income_upper = np.nanpercentile(X["MonthlyIncome"], self.config.income_clip_upper_percentile)
             self.fitted_thresholds_["MonthlyIncome_upper"] = income_upper
 
             if self.config.income_strategy == "median":
                 self.fitted_thresholds_["MonthlyIncome_median"] = np.nanmedian(X["MonthlyIncome"])
 
-        if "DebtRatio" in X.columns and self.config.debt_ratio_strategy == "custom_median":
+        if (
+            self.config.clip_debt_ratio
+            and "DebtRatio" in X.columns
+            and self.config.debt_ratio_strategy == "custom_median"
+        ):
             self.fitted_thresholds_["DebtRatio_custom_median"] = np.nanmedian(
                 X.loc[X["DebtRatio"].le(self.config.debt_ratio_clip_upper), "DebtRatio"]
             )
 
-        if "NumberOfDependents" in X.columns:
+        if self.config.clip_deps and "NumberOfDependents" in X.columns:
             deps_upper = np.nanpercentile(X["NumberOfDependents"], self.config.deps_clip_upper_percentile)
             self.fitted_thresholds_["deps_upper"] = deps_upper
 
-        if "NumberOfOpenCreditLinesAndLoans" in X.columns:
+        if self.config.clip_loans and "NumberOfOpenCreditLinesAndLoans" in X.columns:
             loans_upper = np.nanpercentile(
                 X["NumberOfOpenCreditLinesAndLoans"], self.config.loans_clip_upper_percentile
             )
             self.fitted_thresholds_["loans_upper"] = loans_upper
 
-        if "NumberRealEstateLoansOrLines" in X.columns:
+        if self.config.clip_estate and "NumberRealEstateLoansOrLines" in X.columns:
             estate_upper = np.nanpercentile(X["NumberRealEstateLoansOrLines"], self.config.estate_clip_upper_percentile)
             self.fitted_thresholds_["estate_upper"] = estate_upper
 
-        if "NumberOfTime30-59DaysPastDueNotWorse" in X.columns:
+        if self.config.clip_pd30_59 and "NumberOfTime30-59DaysPastDueNotWorse" in X.columns:
             pd30_59_upper = np.nanpercentile(
                 X["NumberOfTime30-59DaysPastDueNotWorse"], self.config.pd30_59_clip_upper_percentile
             )
             self.fitted_thresholds_["pd30_59_upper"] = pd30_59_upper
 
-        if "NumberOfTime60-89DaysPastDueNotWorse" in X.columns:
+        if self.config.clip_pd60_89 and "NumberOfTime60-89DaysPastDueNotWorse" in X.columns:
             pd60_89_upper = np.nanpercentile(
                 X["NumberOfTime60-89DaysPastDueNotWorse"], self.config.pd60_89_clip_upper_percentile
             )
             self.fitted_thresholds_["pd60_89_upper"] = pd60_89_upper
 
-        if "NumberOfTimes90DaysLate" in X.columns:
+        if self.config.clip_pd90 and "NumberOfTimes90DaysLate" in X.columns:
             pd90_upper = np.nanpercentile(X["NumberOfTimes90DaysLate"], self.config.pd90_clip_upper_percentile)
             self.fitted_thresholds_["pd90_upper"] = pd90_upper
-
-        self.fitted_thresholds_["age_lower"] = self.config.age_clip_lower
-        self.fitted_thresholds_["debt_ratio_upper"] = self.config.debt_ratio_clip_upper
 
         self.feature_names_out_ = self.feature_names_in_.copy()
 
@@ -151,18 +156,25 @@ class OutlierClipper(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         """Apply learned thresholds."""
+        if not self.config.enabled:
+            return X
+
         if not self.fitted_thresholds_:
             raise ValueError("Transformer not fitted. Call fit() first.")
 
         X = X.copy()
 
-        if "age" in X.columns:
+        if self.config.clip_age and "age" in X.columns:
             X["age"] = X["age"].clip(
-                lower=self.fitted_thresholds_["age_lower"],
+                lower=self.config.age_clip_lower,
                 upper=self.fitted_thresholds_["age_upper"],
             )
 
-        if "MonthlyIncome" in X.columns and "MonthlyIncome_upper" in self.fitted_thresholds_:
+        if (
+            self.config.clip_income
+            and "MonthlyIncome" in X.columns
+            and "MonthlyIncome_upper" in self.fitted_thresholds_
+        ):
             mask = X["MonthlyIncome"] > self.fitted_thresholds_["MonthlyIncome_upper"]
 
             if self.config.income_strategy == "clip":
@@ -172,13 +184,13 @@ class OutlierClipper(BaseEstimator, TransformerMixin):
             elif self.config.income_strategy == "zero":
                 X.loc[mask, "MonthlyIncome"] = 0.0
 
-        if "RevolvingUtilizationOfUnsecuredLines" in X.columns:
+        if self.config.clip_util and "RevolvingUtilizationOfUnsecuredLines" in X.columns:
             X["RevolvingUtilizationOfUnsecuredLines"] = X["RevolvingUtilizationOfUnsecuredLines"].clip(
                 upper=self.config.util_clip_upper
             )
 
-        if "DebtRatio" in X.columns:
-            mask = X["DebtRatio"] > self.fitted_thresholds_["debt_ratio_upper"]
+        if self.config.clip_debt_ratio and "DebtRatio" in X.columns:
+            mask = X["DebtRatio"] > self.config.debt_ratio_clip_upper
 
             if self.config.debt_ratio_strategy == "clip":
                 X["DebtRatio"] = X["DebtRatio"].clip(upper=self.fitted_thresholds_["debt_ratio_upper"])
@@ -187,32 +199,32 @@ class OutlierClipper(BaseEstimator, TransformerMixin):
             elif self.config.debt_ratio_strategy == "zero":
                 X.loc[mask, "DebtRatio"] = 0.0
 
-        if "NumberOfDependents" in X.columns:
+        if self.config.clip_deps and "NumberOfDependents" in X.columns:
             X["NumberOfDependents"] = X["NumberOfDependents"].clip(
                 upper=self.fitted_thresholds_["deps_upper"],
             )
 
-        if "NumberOfOpenCreditLinesAndLoans" in X.columns:
+        if self.config.clip_loans and "NumberOfOpenCreditLinesAndLoans" in X.columns:
             X["NumberOfOpenCreditLinesAndLoans"] = X["NumberOfOpenCreditLinesAndLoans"].clip(
                 upper=self.fitted_thresholds_["loans_upper"]
             )
 
-        if "NumberRealEstateLoansOrLines" in X.columns:
+        if self.config.clip_estate and "NumberRealEstateLoansOrLines" in X.columns:
             X["NumberRealEstateLoansOrLines"] = X["NumberRealEstateLoansOrLines"].clip(
                 upper=self.fitted_thresholds_["estate_upper"]
             )
 
-        if "NumberOfTime30-59DaysPastDueNotWorse" in X.columns:
+        if self.config.clip_pd30_59 and "NumberOfTime30-59DaysPastDueNotWorse" in X.columns:
             X["NumberOfTime30-59DaysPastDueNotWorse"] = X["NumberOfTime30-59DaysPastDueNotWorse"].clip(
                 upper=self.fitted_thresholds_["pd30_59_upper"]
             )
 
-        if "NumberOfTime60-89DaysPastDueNotWorse" in X.columns:
+        if self.config.clip_pd60_89 and "NumberOfTime60-89DaysPastDueNotWorse" in X.columns:
             X["NumberOfTime60-89DaysPastDueNotWorse"] = X["NumberOfTime60-89DaysPastDueNotWorse"].clip(
                 upper=self.fitted_thresholds_["pd60_89_upper"]
             )
 
-        if "NumberOfTimes90DaysLate" in X.columns:
+        if self.config.clip_pd90 and "NumberOfTimes90DaysLate" in X.columns:
             X["NumberOfTimes90DaysLate"] = X["NumberOfTimes90DaysLate"].clip(
                 upper=self.fitted_thresholds_["pd90_upper"]
             )
@@ -346,11 +358,11 @@ class IndicatorExtractor(BaseEstimator, TransformerMixin):
         """Build the list of output feature names based on config."""
         features = list(input_features) if input_features is not None else []
 
-        # Missing
+        # Missing indicators
         for col in self.features_to_track_:
             features.append(f"{col}_missing")
 
-        # Else indicators
+        # Other indicators
         if self.config.add_age_buckets:
             features.extend(["is_young", "is_senior"])
 
@@ -430,7 +442,7 @@ class CustomImputer(BaseEstimator, TransformerMixin):
 
         X = X.copy()
         for col, imputer in self.fitted_imputers_.items():
-            if col in X.columns:
+            if col not in self.config.features_skip_imputation and col in X.columns:
                 X[col] = imputer.transform(X[[col]]).ravel()
 
         return X
@@ -678,7 +690,10 @@ class WoEBinningTransformer(BaseEstimator, TransformerMixin):
     """
     Weight of Evidence Binning wrapper for OptBinning.
 
-    Requires optbinning package to be installed.
+    Supports per-feature configuration for:
+    - max_n_bins: Maximum number of bins
+    - monotonic_trend: 'auto', 'ascending', 'descending', or None
+    - min_bin_size: Minimum fraction of observations per bin
 
     Attributes:
         config: WoEConfig object
@@ -695,9 +710,8 @@ class WoEBinningTransformer(BaseEstimator, TransformerMixin):
 
         if self.config.enabled and not OPTBINNING_AVAILABLE:
             warnings.warn(
-                "WoEBinningTransformer is enabled but optbinning is not installed. "
-                "Features will be passed through unchanged. "
-                "Install with: pip install optbinning",
+                "WoEBinningTransformer is enabled but optbinning is not installed."
+                "Features will be passed through unchanged.",
                 UserWarning,
                 stacklevel=2,
             )
@@ -732,20 +746,37 @@ class WoEBinningTransformer(BaseEstimator, TransformerMixin):
         features_to_bin = self.config.features if self.config.features else self.numeric_features
 
         for col in features_to_bin:
-            if col in X.columns:
-                try:
-                    optb = OptimalBinning(name=col, dtype="numerical", solver=self.config.solver)
-                    optb.fit(X[col], y)
-                    self.binners_[col] = optb
-                except Exception as e:
-                    warnings.warn(
-                        f"Failed to fit WoE binning for {col}: {e}. Skipping this feature.",
-                        UserWarning,
-                        stacklevel=2,
-                    )
+            if col not in X.columns:
+                continue
+
+            # Get feature-specific config or use defaults
+            feature_config = self.config.feature_configs.get(col, {})
+            max_n_bins = feature_config.get("max_n_bins", self.config.max_n_bins)
+            min_prebin_size = feature_config.get("min_prebin_size", self.config.min_prebin_size)
+            special_codes = feature_config.get("special_codes", self.config.special_codes)
+            monotonic_trend = feature_config.get("monotonic_trend", "auto")
+
+            try:
+                optb = OptimalBinning(
+                    name=col,
+                    dtype="numerical",
+                    solver=self.config.solver,
+                    max_n_bins=max_n_bins,
+                    min_prebin_size=min_prebin_size,
+                    special_codes=special_codes,
+                    monotonic_trend=monotonic_trend,
+                )
+                optb.fit(X[col], y)
+                self.binners_[col] = optb
+
+            except Exception as e:
+                warnings.warn(
+                    f"Failed to fit WoE binning for {col}: {e}. Skipping this feature.",
+                    UserWarning,
+                    stacklevel=2,
+                )
 
         self.feature_names_out_ = self.feature_names_in_.copy()
-
         return self
 
     def transform(self, X):
@@ -774,6 +805,21 @@ class WoEBinningTransformer(BaseEstimator, TransformerMixin):
             return np.asarray(input_features, dtype=object)
         return np.array([], dtype=object)
 
+    def get_binning_table(self, feature: str) -> pd.DataFrame:
+        """Get binning table for a specific feature."""
+        if feature not in self.binners_:
+            raise ValueError(f"No binner found for feature '{feature}'")
+        return self.binners_[feature].binning_table.build()
+
+    def print_summary(self):
+        """Print summary of all binners."""
+        for col, binner in self.binners_.items():
+            self.get_binning_table(col)
+            print(f"\n{'=' * 60}")
+            print(f"Feature: {col}")
+            print(f"{'=' * 60}")
+            binner.binning_table.plot()
+
 
 def create_validation_pipeline(config: Config) -> Pipeline:
     """
@@ -797,7 +843,10 @@ def create_cleaning_pipeline(config: Config) -> Pipeline:
     """
     pp = config.preprocessing
 
-    steps = [("clipper", OutlierClipper(pp.outlier_clipping))]
+    steps = []
+
+    if pp.outlier_clipping.enabled:
+        steps.append(("clipper", OutlierClipper(pp.outlier_clipping)))
 
     steps.append(("imputer", CustomImputer(pp.imputation)))
 
@@ -810,12 +859,7 @@ def create_feature_pipeline(config: Config) -> Pipeline:
     """
     pp = config.preprocessing
 
-    steps = [("feature_creator", FeatureCreator(pp.feature_creation))]
-
-    if pp.woe.enabled:
-        steps.append(("woe", WoEBinningTransformer(pp.woe, config.data.numeric_features)))
-
-    return Pipeline(steps)
+    return Pipeline([("feature_creator", FeatureCreator(pp.feature_creation))])
 
 
 def create_transformation_pipeline(config: Config) -> Pipeline:
@@ -836,6 +880,13 @@ def create_transformation_pipeline(config: Config) -> Pipeline:
                 ),
             )
         )
+        return Pipeline([("passthrough", FunctionTransformer())])
+
+    if pp.woe.enabled:
+        steps.append(("woe", WoEBinningTransformer(pp.woe, config.data.numeric_features)))
+
+    if not steps:
+        return Pipeline([("passthrough", FunctionTransformer())])
 
     return Pipeline(steps)
 
