@@ -89,13 +89,12 @@ class IndicatorExtractionConfig:
 
     Attributes:
         add_age_buckets: Add age category indicators
-        add_income_missing: Add indicator for missing income values
+        add_missing: Add indicator for missing values
         add_income_clipped: Add indicator for clipped income values
         add_income_zero: Add indicator for zero income values
         add_income_low: Add indicator for low income values
         add_utilization_clipped: Add indicator for clipped utilization values
         add_utilization_99999990: Add indicator for utilization == 0.99999990
-        add_deps_missing: Add indicator for missing NumberOfDependents values
         add_debt_ratio_buckets: Create DebtRatio category indicators
         add_debt_ratio_zero: Category with zero DebtRatio values
         add_debt_ratio_whole: Category with whole DebtRatio values
@@ -141,6 +140,7 @@ class FeatureCreationConfig:
 
     Attributes:
         add_age_polynomial: Create age^2 and age^3 features
+        add_age_polynomial: Create MonthlyIncome^2 and MonthlyIncome^3 features
         add_debt_ratio_polynomial: Create DebtRatio^2 and DebtRatio^3 features
         add_loans_polynomial: Create NumberOfOpenCreditLinesAndLoans^2 and NumberOfOpenCreditLinesAndLoans^3 features
         add_estate_polynomial: Create NumberRealEstateLoansOrLines^2 and NumberRealEstateLoansOrLines^3 features
@@ -151,6 +151,7 @@ class FeatureCreationConfig:
     enabled: bool = False
 
     add_age_polynomial: bool = True
+    add_income_polynomial: bool = True
     add_debt_ratio_polynomial: bool = True
     add_loans_polynomial: bool = True
     add_estate_polynomial: bool = True

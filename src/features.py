@@ -532,6 +532,11 @@ class FeatureCreator(BaseEstimator, TransformerMixin):
             X["age^2"] = X["age"] ** 2
             X["age^3"] = X["age"] ** 3
 
+        # Income polynomial
+        if self.config.add_income_polynomial and "MonthlyIncome" in X.columns:
+            X["MonthlyIncome^2"] = X["MonthlyIncome"] ** 2
+            X["MonthlyIncome^3"] = X["MonthlyIncome"] ** 3
+
         # DebtRatio polynomial
         if self.config.add_debt_ratio_polynomial and "DebtRatio" in X.columns:
             X["DebtRatio^2"] = X["DebtRatio"] ** 2
@@ -579,6 +584,8 @@ class FeatureCreator(BaseEstimator, TransformerMixin):
 
         if self.config.add_age_polynomial:
             features.extend(["age^2", "age^3"])
+        if self.config.add_income_polynomial:
+            features.extend(["MonthlyIncome^2", "MonthlyIncome^3"])
         if self.config.add_debt_ratio_polynomial:
             features.extend(["DebtRatio^2", "DebtRatio^3"])
         if self.config.add_loans_polynomial:
