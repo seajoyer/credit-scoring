@@ -262,8 +262,9 @@ class IndicatorExtractor(BaseEstimator, TransformerMixin):
             features_to_track: List of features to track. If None, tracks all features with missing values.
         """
         self.config = config
-        self.fitted_thresholds_ = {}
         self.features_to_track = features_to_track
+        self.fitted_thresholds_ = {}
+        self.features_to_track_ = {}
 
     def fit(self, X, y=None):
         """Learn dynamic thresholds from training data."""
@@ -282,15 +283,19 @@ class IndicatorExtractor(BaseEstimator, TransformerMixin):
             self.features_to_track_ = [col for col in self.features_to_track if col in X.columns]
 
         if "MonthlyIncome" in X.columns:
-            income_upper = np.nanpercentile(X["MonthlyIncome"], self.config.income_upper_percentile)
-            self.fitted_thresholds_["income_upper"] = income_upper
-
-            income_low = np.nanpercentile(X["MonthlyIncome"], self.config.income_low_percentile)
-            self.fitted_thresholds_["income_low"] = income_low
+            self.fitted_thresholds_["income_upper"] = np.nanpercentile(
+                X["MonthlyIncome"], self.config.income_upper_percentile
+            )
+            self.fitted_thresholds_["income_low"] = np.nanpercentile(
+                X["MonthlyIncome"], self.config.income_low_percentile
+            )
 
         if "DebtRatio" in X.columns:
             self.fitted_thresholds_["DebtRatio_custom_median"] = np.nanmedian(
                 X.loc[X["DebtRatio"].le(self.config.debt_ratio_clip_upper), "DebtRatio"]
+            )
+            self.fitted_thresholds_["DebtRatio_high"] = np.nanpercentile(
+                X["DebtRatio"], self.config.debt_ratio_high_percentile
             )
 
         output_features = list(self.feature_names_in_)
@@ -309,9 +314,10 @@ class IndicatorExtractor(BaseEstimator, TransformerMixin):
         X = X.copy()
 
         # Missing
-        for col in self.features_to_track_:
-            if col in X.columns:
-                X[f"{col}_missing"] = X[col].isna().astype(int)
+        if self.config.add_missing:
+            for col in self.features_to_track_:
+                if col in X.columns:
+                    X[f"{col}_missing"] = X[col].isna().astype(int)
 
         # Age buckets
         if self.config.add_age_buckets and "age" in X.columns:
@@ -355,6 +361,13 @@ class IndicatorExtractor(BaseEstimator, TransformerMixin):
                 int
             )
 
+        # High DebtRatio and low income
+        if self.config.add_high_debt_low_income and "DebtRatio" in X.columns and "MonthlyIncome" in X.columns:
+            X["high_debt_low_income"] = (
+                X["DebtRatio"].gt(self.fitted_thresholds_["DebtRatio_high"])
+                & X["MonthlyIncome"].lt(self.fitted_thresholds_["income_low"])
+            ).astype(int)
+
         return X
 
     def get_feature_names_out(self, input_features=None):
@@ -366,8 +379,9 @@ class IndicatorExtractor(BaseEstimator, TransformerMixin):
         features = list(input_features) if input_features is not None else []
 
         # Missing indicators
-        for col in self.features_to_track_:
-            features.append(f"{col}_missing")
+        if self.config.add_missing:
+            for col in self.features_to_track_:
+                features.append(f"{col}_missing")
 
         # Other indicators
         if self.config.add_age_buckets:
@@ -391,6 +405,8 @@ class IndicatorExtractor(BaseEstimator, TransformerMixin):
             features.append("DebtRatio_zero")
         if self.config.add_debt_ratio_whole:
             features.append("DebtRatio_whole")
+        if self.config.add_high_debt_low_income:
+            features.append("high_debt_low_income")
 
         return np.array(features, dtype=object)
 
@@ -498,7 +514,7 @@ class FeatureCreator(BaseEstimator, TransformerMixin):
             self.feature_names_in_ = np.array([f"x{i}" for i in range(X.shape[1])], dtype=object)
 
         if not self.config.enabled:
-            self.feature_names_out_ = self.feature_names_out_.copy()
+            self.feature_names_out_ = self.feature_names_in_.copy()
             return self
 
         self.feature_names_out_ = self._get_output_features(self.feature_names_in_)
@@ -530,6 +546,10 @@ class FeatureCreator(BaseEstimator, TransformerMixin):
         if self.config.add_estate_polynomial and "NumberRealEstateLoansOrLines" in X.columns:
             X["NumberRealEstateLoansOrLines^2"] = X["NumberRealEstateLoansOrLines"] ** 2
             X["NumberRealEstateLoansOrLines^3"] = X["NumberRealEstateLoansOrLines"] ** 3
+
+        # Income per person
+        if self.config.add_income_per_person and "MonthlyIncome" in X.columns and "NumberOfDependents" in X.columns:
+            X["income_per_person"] = X["MonthlyIncome"] / (X["NumberOfDependents"] + 1)
 
         # Delinquency features
         if self.config.add_delinquency_features:
@@ -565,6 +585,8 @@ class FeatureCreator(BaseEstimator, TransformerMixin):
             features.extend(["NumberOfOpenCreditLinesAndLoans^2", "NumberOfOpenCreditLinesAndLoans^3"])
         if self.config.add_estate_polynomial:
             features.extend(["NumberRealEstateLoansOrLines^2", "NumberRealEstateLoansOrLines^3"])
+        if self.config.add_income_per_person:
+            features.extend(["income_per_person"])
         if self.config.add_delinquency_features:
             features.extend(["total_delinquencies", "has_delinquency", "weighted_delinquencies"])
 
@@ -748,7 +770,7 @@ class WoEBinningTransformer(BaseEstimator, TransformerMixin):
             )
             return self
 
-        features_to_bin = self.config.features if self.config.features else self.numeric_features
+        features_to_bin = self.config.feature_configs if self.config.feature_configs else self.numeric_features
 
         for col in features_to_bin:
             if col not in X.columns:
@@ -838,9 +860,6 @@ def create_indicator_pipeline(config: Config) -> Pipeline:
     """
     pp = config.preprocessing
 
-    if not pp.indicator_extraction.enabled:
-        return Pipeline([("passthrough", FunctionTransformer())])
-
     return Pipeline([("indicator_extractor", IndicatorExtractor(pp.indicator_extraction))])
 
 
@@ -852,8 +871,7 @@ def create_cleaning_pipeline(config: Config) -> Pipeline:
 
     steps = []
 
-    if pp.outlier_clipping.enabled:
-        steps.append(("clipper", OutlierClipper(pp.outlier_clipping)))
+    steps.append(("clipper", OutlierClipper(pp.outlier_clipping)))
 
     steps.append(("imputer", CustomImputer(pp.imputation)))
 
@@ -865,9 +883,6 @@ def create_feature_pipeline(config: Config) -> Pipeline:
     Create feature engineering pipeline.
     """
     pp = config.preprocessing
-
-    if not pp.feature_creation.enabled:
-        return Pipeline([("passthrough", FunctionTransformer())])
 
     return Pipeline([("feature_creator", FeatureCreator(pp.feature_creation))])
 

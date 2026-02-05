@@ -2,7 +2,6 @@
 
 {
   packages = with pkgs; [
-    # ty
     git
   ];
 
@@ -15,6 +14,4 @@
     };
     venv.enable = true;
   };
-
-  processes.jupyter.exec = "jupyter notebook"; 
 }

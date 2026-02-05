@@ -31,7 +31,7 @@ class OutlierClippingConfig:
     util_clip_upper: float = 1.0
 
     clip_debt_ratio: bool = True
-    debt_ratio_clip_upper: float = 2.0
+    debt_ratio_clip_upper: float = 4.0
 
     clip_deps: bool = True
     deps_clip_upper_percentile: float = 97.5
@@ -106,27 +106,28 @@ class IndicatorExtractionConfig:
 
     enabled: bool = True
 
+    add_missing: bool = True
     add_age_buckets: bool = True
-    add_income_missing: bool = True
     add_income_clipped: bool = True
     add_income_zero: bool = True
     add_income_low: bool = True
     add_utilization_clipped: bool = True
     add_utilization_99999990: bool = True
-    add_deps_missing: bool = True
     add_debt_ratio_buckets: bool = True
     add_debt_ratio_zero: bool = True
     add_debt_ratio_whole: bool = True
+    add_high_debt_low_income: bool = True
 
     age_young_threshold: int = 30
     age_senior_threshold: int = 59
 
     income_upper_percentile: float = OutlierClippingConfig().income_clip_upper_percentile
-    income_low_percentile: float = 5.0
+    income_low_percentile: float = 10.0
 
     util_clip_upper: float = OutlierClippingConfig().util_clip_upper
 
     debt_ratio_clip_upper: float = OutlierClippingConfig().debt_ratio_clip_upper
+    debt_ratio_high_percentile: float = 80.0
 
     def to_dict(self) -> dict:
         """Convert to dictionary for serialization."""
@@ -154,6 +155,7 @@ class FeatureCreationConfig:
     add_loans_polynomial: bool = True
     add_estate_polynomial: bool = True
 
+    add_income_per_person: bool = True
     add_delinquency_features: bool = True
 
     def to_dict(self) -> dict:
@@ -224,7 +226,6 @@ class WoEConfig:
     """
 
     enabled: bool = False
-    features: list[str] = field(default_factory=list)
     solver: Literal["cp", "mip"] = "cp"
     max_n_bins: int = 10
     min_prebin_size: float = 0.05
@@ -233,6 +234,9 @@ class WoEConfig:
         default_factory=lambda: {
             "age": {"max_n_bins": 10, "monotonic_trend": "descending"},
             "MonthlyIncome": {"max_n_bins": 10, "monotonic_trend": "auto"},
+            "income_per_person": {"max_n_bins": 10, "monotonic_trend": "auto"},
+            "total_delinquencies": {"max_n_bins": 10, "monotonic_trend": "auto"},
+            "weighted_delinquencies": {"max_n_bins": 10, "monotonic_trend": "auto"},
             "RevolvingUtilizationOfUnsecuredLines": {"max_n_bins": 10, "monotonic_trend": "ascending"},
             "DebtRatio": {"max_n_bins": 10, "special_codes": {"zero": 0}},
             "NumberOfDependents": {"max_n_bins": 10, "min_prebin_size": 0.02, "monotonic_trend": "ascending"},
