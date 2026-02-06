@@ -7,6 +7,8 @@ delme.png
 .devenv*
 devenv.local.nix
 devenv.local.yaml
+devenv.lock
+uv.lock
 
 __pycache__/
 .venv/

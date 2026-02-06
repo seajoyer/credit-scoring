@@ -142,7 +142,7 @@
 - **Visualization**: matplotlib, seaborn
 - **Interpretability**: shap
 
-## Структура проекта
+### Структура проекта
 ```
 ├── data/                   # Данные (не включены в репозиторий)
 ├── models/                 # Сохраненные модели
@@ -184,7 +184,7 @@ model.fit(X_train, y_train)
 y_pred_proba = model.predict_proba(X_test)[:, 1]
 ```
 
-### Пример настройки preprocessing
+### Пример настройки предобработки
 ```python
 from src import Config, OutlierClippingConfig, WoEConfig
 
