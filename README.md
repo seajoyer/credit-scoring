@@ -144,25 +144,18 @@
 
 ## Структура проекта
 ```
-├── data/                          # Данные (не включены в репозиторий)
-│   ├── raw/                       # Исходные данные
-│   └── processed/                 # Обработанные данные
-├── models/                        # Сохраненные модели
-│   ├── CatBoost.joblib
-│   ├── logreg_baseline.joblib
-│   ├── logreg_tuned.joblib
-│   ├── logreg_woe.joblib
-│   └── XGBoost.joblib
-├── notebooks/                     # Jupyter notebooks
-│   ├── 1.0-eda.ipynb             # Exploratory Data Analysis
-│   ├── 2.0-feature-engineering.ipynb  # Feature Engineering
-│   └── 3.0-modeling.ipynb        # Model Training & Evaluation
-├── src/                          # Исходный код
+├── data/                   # Данные (не включены в репозиторий)
+├── models/                 # Сохраненные модели
+├── notebooks/              # Jupyter notebooks
+│   ├── 1.0-eda.ipynb       # Exploratory Data Analysis
+│   ├── 2.0-feature-engineering.ipynb
+│   └── 3.0-modeling.ipynb  # Model Training & Evaluation
+├── src/                    # Исходный код
 │   ├── __init__.py
-│   ├── config.py                 # Конфигурация pipeline
-│   ├── features.py               # Feature engineering классы
-│   └── helpers.py                # Вспомогательные функции
-├── pyproject.toml                # Зависимости проекта
+│   ├── config.py           # Конфигурация pipeline
+│   ├── features.py         # Классы Feature engineering
+│   └── helpers.py          # Вспомогательные функции
+├── pyproject.toml          # Зависимости проекта
 └── README.md
 ```
 
