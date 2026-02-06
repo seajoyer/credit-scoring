@@ -171,7 +171,7 @@ config = get_config()
 # Создание preprocessing pipeline
 preprocessor = create_preprocessing_pipeline(config)
 
-# Полный pipeline
+# Полный pipeline для обучения
 model = Pipeline([
     ('preprocessing', preprocessor),
     ('classifier', LogisticRegression(class_weight='balanced'))
@@ -197,7 +197,7 @@ config.preprocessing.outlier_clipping = OutlierClippingConfig(
     age_clip_upper_percentile=99.0
 )
 
-# Включение WoE-биннинга
+# Использование WoE-биннинга
 config.preprocessing.woe = WoEConfig(
     enabled=True,
     max_n_bins=10,
@@ -208,3 +208,7 @@ config.preprocessing.woe = WoEConfig(
     }
 )
 ```
+
+## Лицензия MIT
+
+Данный проект создан в образовательных целях.
