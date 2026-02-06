@@ -28,7 +28,7 @@ from .features import (
     load_pipeline,
     save_pipeline,
 )
-from .helpers import apply_woe_binning, cap_outliers, plot_feature_analysis, plot_log_odds, plot_WoE
+from .helpers import evaluate_models, eval_binary_classifier, apply_woe_binning, cap_outliers, plot_feature_analysis, plot_log_odds, plot_WoE
 
 __all__ = [
     "Config",
@@ -50,11 +50,13 @@ __all__ = [
     "WoEBinningTransformer",
     "apply_woe_binning",
     "cap_outliers",
+    "evaluate_models",
     "create_cleaning_pipeline",
     "create_feature_pipeline",
     "create_preprocessing_pipeline",
     "create_scaling_pipeline",
     "create_validation_pipeline",
+    "eval_binary_classifier",
     "get_config",
     "load_pipeline",
     "plot_WoE",

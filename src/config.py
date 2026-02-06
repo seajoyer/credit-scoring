@@ -330,11 +330,9 @@ class Paths:
     raw_data_dir: Path = field(init=False)
     processed_data_dir: Path = field(init=False)
     models_dir: Path = field(init=False)
-    figures_dir: Path = field(init=False)
-    logs_dir: Path = field(init=False)
 
     train_file: Path = field(init=False)
-    test_file: Path = field(init=False)
+    test_file:  Path = field(init=False)
 
     def __post_init__(self):
         """Initialize derived paths."""
@@ -342,15 +340,13 @@ class Paths:
         self.raw_data_dir = self.data_dir / "raw"
         self.processed_data_dir = self.data_dir / "processed"
         self.models_dir = self.project_root / "models"
-        self.figures_dir = self.project_root / "figures"
-        self.logs_dir = self.project_root / "logs"
 
         self.train_file = self.raw_data_dir / "cs-training.csv"
         self.test_file = self.raw_data_dir / "cs-test.csv"
 
     def create_directories(self):
         """Create all project directories if they don't exist."""
-        for path in [self.raw_data_dir, self.processed_data_dir, self.models_dir, self.figures_dir, self.logs_dir]:
+        for path in [self.raw_data_dir, self.processed_data_dir, self.models_dir]:
             path.mkdir(parents=True, exist_ok=True)
 
     def get_model_path(self, model_name: str, version: int = 1) -> Path:
@@ -399,68 +395,6 @@ class DataConfig:
 
 
 @dataclass
-class ModelRegistry:
-    """
-    Registry of model configurations.
-
-    Provides default hyperparameters for common models.
-    """
-
-    logistic_regression: dict = field(
-        default_factory=lambda: {
-            "C": 1.0,
-            "penalty": "l2",
-            "solver": "lbfgs",
-            "max_iter": 1000,
-            "class_weight": "balanced",
-        }
-    )
-
-    lgbm: dict = field(
-        default_factory=lambda: {
-            "n_estimators": 100,
-            "learning_rate": 0.1,
-            "max_depth": 5,
-            "num_leaves": 31,
-            "class_weight": "balanced",
-            "random_state": 42,
-        }
-    )
-
-    xgboost: dict = field(
-        default_factory=lambda: {
-            "n_estimators": 100,
-            "learning_rate": 0.1,
-            "max_depth": 5,
-            "scale_pos_weight": 14.0,
-            "random_state": 42,
-        }
-    )
-
-    random_forest: dict = field(
-        default_factory=lambda: {"n_estimators": 100, "max_depth": 10, "class_weight": "balanced", "random_state": 42}
-    )
-
-
-@dataclass
-class TrainingConfig:
-    """
-    Training and hyperparameter search configuration.
-
-    Attributes:
-        random_seed: Random seed for reproducibility
-        search_method: Type of hyperparameter search
-        n_jobs: Number of parallel jobs (-1 = all cores)
-        cv_folds: Number of cross-validation folds
-    """
-
-    random_seed: int = 42
-    search_method: Literal["grid", "random", "bayesian"] = "grid"
-    n_jobs: int = -1
-    cv_folds: int = 5
-
-
-@dataclass
 class Config:
     """
     Master configuration object for entire pipeline.
@@ -471,13 +405,10 @@ class Config:
     paths: Paths = field(default_factory=Paths)
     data: DataConfig = field(default_factory=DataConfig)
     preprocessing: PreprocessingConfig = field(default_factory=PreprocessingConfig)
-    models: ModelRegistry = field(default_factory=ModelRegistry)
-    training: TrainingConfig = field(default_factory=TrainingConfig)
 
     def __post_init__(self):
         """Initialize configuration."""
         self.paths.create_directories()
-        set_seeds(self.training.random_seed)
 
     def save(self, directory: Path, name: str = "config"):
         """

@@ -4,18 +4,15 @@ pyrightconfig.json
 credit_scoring.egg-info
 delme.png
 
-# Devenv
 .devenv*
 devenv.local.nix
 devenv.local.yaml
 
-# Python & UV
 __pycache__/
 .venv/
 .python-version
+.ruff_cache
 
-# direnv
-.direnv
+.direnv/
 
-# pre-commit
 .pre-commit-config.yaml

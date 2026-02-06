@@ -717,16 +717,6 @@ class FeatureTransformer(BaseEstimator, TransformerMixin):
             return np.asarray(input_features, dtype=object)
         return np.array([], dtype=object)
 
-    def get_fitted_info(self) -> dict:
-        """Return fitted Yeo-Johnson parameters for inspection."""
-        info = {}
-        for feature, pt in self.power_transformers_.items():
-            info[feature] = {
-                "lambda": float(pt.lambdas_[0]),
-                "standardize": self.yeo_johnson_standardize,
-            }
-        return info
-
 
 class WoEBinningTransformer(BaseEstimator, TransformerMixin):
     """
