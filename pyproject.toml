@@ -33,8 +33,6 @@ line-length = 120
 
 exclude = [
     "data/",
-    "figures/",
-    "logs/",
     "models/",
 ]
 
