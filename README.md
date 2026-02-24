@@ -146,13 +146,13 @@
 ├── data/                   # Данные (не включены в репозиторий)
 ├── models/                 # Сохраненные модели
 ├── notebooks/              # Jupyter notebooks
-│   ├── 01-eda.ipynb       # Exploratory Data Analysis
+│   ├── 01-eda.ipynb        # Exploratory Data Analysis
 │   ├── 02-feature-engineering.ipynb
-│   └── 03-modeling.ipynb  # Model Training & Evaluation
+│   └── 03-modeling.ipynb   # Model Training & Evaluation
 ├── src/                    # Исходный код
 │   ├── __init__.py
-│   ├── config.py           # Конфигурация pipeline
-│   ├── features.py         # Классы Feature engineering
+│   ├── config.py           # Конфигурация пайплайна предобработки
+│   ├── features.py         # Пайплайн предобработки
 │   └── helpers.py          # Вспомогательные функции
 ├── pyproject.toml          # Зависимости проекта
 └── README.md
