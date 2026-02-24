@@ -147,9 +147,9 @@
 ├── data/                   # Данные (не включены в репозиторий)
 ├── models/                 # Сохраненные модели
 ├── notebooks/              # Jupyter notebooks
-│   ├── 1.0-eda.ipynb       # Exploratory Data Analysis
-│   ├── 2.0-feature-engineering.ipynb
-│   └── 3.0-modeling.ipynb  # Model Training & Evaluation
+│   ├── 01-eda.ipynb       # Exploratory Data Analysis
+│   ├── 02-feature-engineering.ipynb
+│   └── 03-modeling.ipynb  # Model Training & Evaluation
 ├── src/                    # Исходный код
 │   ├── __init__.py
 │   ├── config.py           # Конфигурация pipeline
