@@ -167,10 +167,10 @@ from sklearn.pipeline import Pipeline
 # Загрузка конфигурации
 config = get_config()
 
-# Создание preprocessing pipeline
+# Создание пайплайна предобработки
 preprocessor = create_preprocessing_pipeline(config)
 
-# Полный pipeline для обучения
+# Полный Пайплайн обучения
 model = Pipeline([
     ('preprocessing', preprocessor),
     ('classifier', LogisticRegression(class_weight='balanced'))
@@ -196,7 +196,7 @@ config.preprocessing.outlier_clipping = OutlierClippingConfig(
     age_clip_upper_percentile=99.0
 )
 
-# Использование WoE-биннинга
+# Настройка WoE-биннинга
 config.preprocessing.woe = WoEConfig(
     enabled=True,
     max_n_bins=10,
@@ -207,7 +207,3 @@ config.preprocessing.woe = WoEConfig(
     }
 )
 ```
-
-## Лицензия MIT
-
-Проект создан в образовательных целях.
